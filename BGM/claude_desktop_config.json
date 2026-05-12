@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "fdp-datahub-mcp": {
+      "command": "/opt/homebrew/bin/npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "http://datahub-mcp-server-prod.fdp-datahub-backend-prod.fkcloud.in/mcp/",
+        "--allow-http",
+        "--transport",
+        "http-only"
+      ]
+    }
+  }
+}
