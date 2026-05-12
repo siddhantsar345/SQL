@@ -1,0 +1,6 @@
+create table adhoc_ttl_90days.largefurniture_control_19th_September_2025 as
+SELECT base.account_id
+FROM adhoc_ttl_90days.largefurniture_base_19th_September_2025 base
+LEFT JOIN adhoc_ttl_90days.largefurniture_test_19th_September_2025 test
+ON base.account_id = test.account_id
+WHERE test.account_id is null

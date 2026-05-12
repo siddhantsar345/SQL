@@ -1,0 +1,72 @@
+// =========================================================
+//  Meesho PI CI Drive Sync (Auto-Decompress Version)
+//  Pulls daily attachments, unzips .gz files, and saves as .csv
+// =========================================================
+
+const DRIVE_FOLDER_ID = '1sRYgcylmGD1_xpzfl6U9goC-DBIJd4pz';
+
+// Matches any email whose subject starts with "Meesho PI CI Daily Export"
+// received in the last 1 day, with an attachment.
+const GMAIL_QUERY = 'subject:"Meesho PI CI Daily Export" has:attachment newer_than:1d';
+
+function meesho() {
+  const threads = GmailApp.search(GMAIL_QUERY, 0, 10);
+  Logger.log(`Found ${threads.length} matching thread(s).`);
+
+  if (threads.length === 0) {
+    Logger.log('No matching email — nothing to do.');
+    return;
+  }
+
+  const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  let savedCount = 0;
+
+  threads.forEach(thread => {
+    thread.getMessages().forEach(msg => {
+      // Skip already-processed messages or messages without attachments
+      if (msg.isInTrash() || msg.getAttachments().length === 0) return;
+
+      msg.getAttachments().forEach(att => {
+        let name = att.getName();
+        let blob = att.copyBlob();
+
+        // 1. Only handle csv or csv.gz attachments
+        if (!/\.csv(\.gz)?$/i.test(name)) {
+          Logger.log(`Skipping non-CSV attachment: ${name}`);
+          return;
+        }
+
+        // 2. Handle Gzip decompression if necessary
+        if (/\.gz$/i.test(name)) {
+          try {
+            Logger.log(`Decompressing ${name}...`);
+            blob = Utilities.ungzip(blob);
+            // Rename file by removing the .gz extension (e.g., file.csv.gz -> file.csv)
+            name = name.replace(/\.gz$/i, '');
+            blob.setName(name); 
+          } catch (e) {
+            Logger.log(`Error decompressing ${name}: ${e.toString()}`);
+            return;
+          }
+        }
+
+        // 3. Skip if a file with the (possibly new) name already exists
+        const existing = folder.getFilesByName(name);
+        if (existing.hasNext()) {
+          Logger.log(`Already saved: ${name} — skipping.`);
+          return;
+        }
+
+        // 4. Save the file to Drive
+        const saved = folder.createFile(blob);
+        Logger.log(`Saved: ${name} (id=${saved.getId()})`);
+        savedCount++;
+      });
+
+      // Mark processed so the same message isn't grabbed again tomorrow
+      msg.markRead();
+    });
+  });
+
+  Logger.log(`Done. Saved ${savedCount} new file(s) to Drive folder ${DRIVE_FOLDER_ID}.`);
+}

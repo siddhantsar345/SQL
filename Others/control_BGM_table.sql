@@ -1,0 +1,6 @@
+create table adhoc_ttl_90days.makeupfragrances_on_control_till_16th_sep2025 as
+SELECT base.account_id
+FROM adhoc_ttl_90days.makeupfragrances_on_base_16th_Sept_2025 base
+LEFT JOIN adhoc_ttl_90days.makeupfragrances_on_test_16th_Sept_2025 test
+ON base.account_id = test.account_id
+WHERE test.account_id is null

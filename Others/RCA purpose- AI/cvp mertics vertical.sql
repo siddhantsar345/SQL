@@ -1,0 +1,247 @@
+WITH pareto_verticals AS (
+    SELECT 
+        analytic_super_category, 
+        analytic_vertical
+    FROM fdp_uploads.ds_fkint_analytics_cdo_pareto_verticals_bgmhfl_fact_1_0
+    GROUP BY 
+        analytic_super_category, 
+        analytic_vertical
+)
+
+SELECT
+    speed.order_date_key,
+    speed.analytic_business_unit,
+    speed.analytic_super_category, 
+    speed.analytic_vertical, 
+
+    speed.total_units,
+    speed.d0_units,
+    speed.d1_units,
+    speed.d2_units,
+    speed.d4_units,
+    speed.d6_units,
+
+    instock.a_listings,
+    instock.a_products,
+    instock.ai_listings,
+    instock.ai_products,
+
+    ai_myntra.ai_search_ppvs,
+    ai_myntra.ai_fk_cd,
+    ai_myntra.ai_az_cd,
+    ai_myntra.ai_wfcp,
+    ai_myntra.ai_wccp,
+    ai_myntra.myntra_search_ppvs,
+    ai_myntra.myntra_fk_cd,
+    ai_myntra.myntra_az_cd,
+    ai_myntra.myntra_wfcp,
+    ai_myntra.myntra_wccp,
+
+    price_drop.input_bau_weighted_asp,
+    price_drop.input_fes_weighted_asp,
+    price_drop.output_bau_weighted_asp,
+    price_drop.output_fes_weighted_asp
+
+FROM (
+    SELECT
+        sales.order_date_key,
+        sales.analytic_business_unit,
+        sales.analytic_super_category,
+        sales.analytic_vertical,
+        
+        SUM(sales.units) as total_units,
+        SUM(CASE WHEN sales.sla_in_days <= 0 THEN sales.units ELSE 0 END) AS d0_units,
+        SUM(CASE WHEN sales.sla_in_days <= 1 THEN sales.units ELSE 0 END) AS d1_units,
+        SUM(CASE WHEN sales.sla_in_days <= 2 THEN sales.units ELSE 0 END) AS d2_units,
+        SUM(CASE WHEN sales.sla_in_days <= 4 THEN sales.units ELSE 0 END) AS d4_units,
+        SUM(CASE WHEN sales.sla_in_days <= 6 THEN sales.units ELSE 0 END) AS d6_units
+
+    FROM bigfoot_external_neo.cp_bi_prod_sales__forward_unit_history_fact sales
+
+    WHERE LOWER(sales.status) IN ('in_progress', 'undelivered', 'completed', 'delivered', 'approved', 'shipped', 'ready_to_ship', 'returned', 'return_requested', 'activated')
+        AND sales.type  !='service'
+        AND sales.replacement_for_unit IS NULL
+        AND sales.exchange_for_unit IS NULL
+        AND sales.is_freebie = FALSE
+        AND sales.marketplace_id IN ('FLIPKART')
+        AND lower(sales.analytic_business_unit) IN ('bgm','home','lifestyle','furniture')
+        AND sales.order_date_key BETWEEN 20260101 AND 20260131
+        AND sales.is_shopsy_order = FALSE    
+    GROUP BY
+        sales.order_date_key,
+        sales.analytic_business_unit,
+        sales.analytic_super_category,
+        sales.analytic_vertical
+
+) as speed
+
+INNER JOIN pareto_verticals pv
+    ON LOWER(speed.analytic_super_category) = LOWER(pv.analytic_super_category)
+    AND LOWER(speed.analytic_vertical) = LOWER(pv.analytic_vertical)
+
+LEFT JOIN (
+    SELECT
+        list_dim.process_date_key as order_date_key,
+        prod_dim.analytic_business_unit,
+        prod_dim.analytic_super_category,
+        prod_dim.analytic_vertical,
+
+        count(distinct list_dim.listing_id) as a_listings,
+        count(distinct list_dim.product_id) as a_products,
+        count(distinct case when list_dim.final_atp > 0 then list_dim.listing_id end) as ai_listings,
+        count(distinct case when list_dim.final_atp > 0 then list_dim.product_id end) as ai_products
+
+    FROM bigfoot_external_neo.sp_analytics__listing_history_90d_fact as list_dim
+
+    LEFT JOIN bigfoot_external_neo.sp_product__product_categorization_hive_dim prod_dim
+        on list_dim.product_id = prod_dim.product_id
+
+    WHERE list_dim.marketplace_id = 'FLIPKART'
+        AND lower(prod_dim.analytic_business_unit) in ('bgm','home','lifestyle','furniture')
+        AND list_dim.process_date_key BETWEEN 20260101 AND 20260131
+    GROUP BY
+        list_dim.process_date_key,
+        prod_dim.analytic_business_unit,
+        prod_dim.analytic_super_category,
+        prod_dim.analytic_vertical
+
+) as instock
+    ON instock.order_date_key = speed.order_date_key 
+    AND instock.analytic_business_unit = speed.analytic_business_unit 
+    AND instock.analytic_super_category = speed.analytic_super_category 
+    AND instock.analytic_vertical = speed.analytic_vertical 
+
+LEFT JOIN (
+    SELECT  
+        a.order_date_key,
+        a.analytic_business_unit,  
+        a.analytic_super_category,
+        a.analytic_vertical,
+        
+        SUM(CASE WHEN lower(a.competitor) IN ('ai') AND a.ci_business_unit NOT IN ("BGM(Books)", "Electronics") THEN a.search_ppvs ELSE 0 END) AS ai_search_ppvs,
+        SUM(CASE WHEN a.fsn_coupon_landscape = "FK_Comp" AND lower(a.competitor) IN ('ai') AND a.ci_business_unit NOT IN ("BGM(Books)", "Electronics") THEN a.search_ppvs ELSE 0 END) AS ai_fk_cd,
+        SUM(CASE WHEN a.fsn_coupon_landscape = "AI_Comp" AND lower(a.competitor) IN ('ai') AND a.ci_business_unit NOT IN ("BGM(Books)", "Electronics") THEN a.search_ppvs ELSE 0 END) AS ai_az_cd,
+        SUM(CASE WHEN lower(a.competitor) IN ('ai') AND a.ci_business_unit NOT IN ("BGM(Books)", "Electronics") THEN a.fk_price_post_coupon * a.search_ppvs ELSE 0 END) AS ai_wfcp,
+        SUM(CASE WHEN lower(a.competitor) IN ('ai') AND a.ci_business_unit NOT IN ("BGM(Books)", "Electronics") THEN a.comp_price_post_coupon * a.search_ppvs ELSE 0 END) AS ai_wccp,
+
+        SUM(CASE WHEN lower(a.competitor) IN ("myntra") AND a.ci_business_unit IN ("lifestyle-Non_Apparel","lifestyle-Apparel") THEN a.search_ppvs ELSE 0 END) AS myntra_search_ppvs,
+        SUM(CASE WHEN a.fsn_coupon_landscape = "FK_Comp" AND lower(a.competitor) IN ("myntra") AND a.ci_business_unit IN ("lifestyle-Non_Apparel","lifestyle-Apparel") THEN a.search_ppvs ELSE 0 END) AS myntra_fk_cd,
+        SUM(CASE WHEN a.fsn_coupon_landscape = "AI_Comp" AND lower(a.competitor) IN ("myntra") AND a.ci_business_unit IN ("lifestyle-Non_Apparel","lifestyle-Apparel") THEN a.search_ppvs ELSE 0 END) AS myntra_az_cd,
+        SUM(CASE WHEN lower(a.competitor) IN ("myntra") AND a.ci_business_unit IN ("lifestyle-Non_Apparel","lifestyle-Apparel") THEN a.fk_price_post_coupon * a.search_ppvs ELSE 0 END) AS myntra_wfcp,
+        SUM(CASE WHEN lower(a.competitor) IN ("myntra") AND a.ci_business_unit IN ("lifestyle-Non_Apparel","lifestyle-Apparel") THEN a.comp_price_post_coupon * a.search_ppvs ELSE 0 END) AS myntra_wccp
+    FROM (
+        SELECT  
+            CAST(date_key AS int64) AS order_date_key,
+            a.competitor,  
+            a.analytic_business_unit,  
+            a.ci_business_unit,  
+            a.analytic_super_category,  
+            CASE WHEN lower(prod.analytic_business_unit) = 'lifestyle' THEN prod.cms_vertical ELSE prod.analytic_vertical END AS analytic_vertical,
+            search_ppvs,  
+            fk_price_post_coupon,  
+            (comp_price - COALESCE(comp_coupon_discount, 0)) AS comp_price_post_coupon,
+            CASE
+                WHEN fk_price_post_coupon < 1000 AND (comp_price - COALESCE(comp_coupon_discount, 0)) / NULLIF(fk_price_post_coupon, 0) > 1.02 THEN "FK_Comp"
+                WHEN fk_price_post_coupon < 1000 AND (comp_price - COALESCE(comp_coupon_discount, 0)) / NULLIF(fk_price_post_coupon, 0) < 0.98 THEN "AI_Comp"
+                WHEN fk_price_post_coupon >= 1000 AND (comp_price - COALESCE(comp_coupon_discount, 0)) / NULLIF(fk_price_post_coupon, 0) > 1.01 THEN "FK_Comp"
+                WHEN fk_price_post_coupon >= 1000 AND (comp_price - COALESCE(comp_coupon_discount, 0)) / NULLIF(fk_price_post_coupon, 0) < 0.99 THEN "AI_Comp"
+                ELSE "Parity"
+            END AS fsn_coupon_landscape
+        FROM bigfoot_external_neo.analytics_cdo__unweighted_comp_base_hist_fact AS a  
+        LEFT JOIN bigfoot_external_neo.sp_product__product_categorization_hive_dim prod
+            ON prod.product_id = a.fsn
+        WHERE (CAST(date_key AS int64) BETWEEN 20260101 AND 20260131)
+            AND (
+                (lower(competitor) IN ("ai") AND ci_business_unit NOT IN ("BGM(Books)", "Electronics"))
+                OR
+                (lower(competitor) IN ("myntra") AND ci_business_unit IN ("lifestyle-Non_Apparel","lifestyle-Apparel"))
+            )
+    ) AS a
+    GROUP BY
+        a.order_date_key,
+        a.analytic_business_unit,
+        a.analytic_super_category,
+        a.analytic_vertical
+) as ai_myntra
+    ON ai_myntra.order_date_key = speed.order_date_key 
+    AND ai_myntra.analytic_business_unit = speed.analytic_business_unit 
+    AND ai_myntra.analytic_super_category = speed.analytic_super_category 
+    AND ai_myntra.analytic_vertical = speed.analytic_vertical
+
+LEFT JOIN (
+    SELECT
+        order_date_key,
+        analytic_business_unit,
+        analytic_super_category,
+        analytic_vertical,
+
+        SUM(input_bau_weighted_asp) as input_bau_weighted_asp,
+        SUM(input_fes_weighted_asp) as input_fes_weighted_asp,
+        SUM(output_bau_weighted_asp) as output_bau_weighted_asp,
+        SUM(output_fes_weighted_asp) as output_fes_weighted_asp
+    FROM (
+        SELECT
+            fes.order_date_key,
+            bau.analytic_business_unit,
+            bau.analytic_super_category,
+            bau.analytic_vertical,
+            (bau.gmv/bau.units)*bau.units as input_bau_weighted_asp,
+            (fes.gmv/fes.units)*bau.units as input_fes_weighted_asp,
+            (bau.gmv/bau.units)*fes.units as output_bau_weighted_asp,
+            (fes.gmv/fes.units)*fes.units as output_fes_weighted_asp
+        FROM (
+            SELECT
+                sales.analytic_super_category,
+                analytic_business_unit,
+                analytic_vertical,
+                sales.listing_id,
+                SUM(units) as units,
+                SUM(gmv) as gmv
+            FROM bigfoot_external_neo.cp_bi_prod_sales__forward_unit_history_fact sales
+            WHERE lower(sales.status) in ('in_progress','undelivered','completed','delivered','approved','shipped','ready_to_ship','returned', 'return_requested','activated')
+                AND sales.type !='service'
+                AND sales.replacement_for_unit IS NULL
+                AND sales.exchange_for_unit IS NULL
+                AND sales.is_freebie =FALSE
+                AND sales.marketplace_id IN ('FLIPKART')
+                AND sales.is_shopsy_order =FALSE
+                AND lower(sales.analytic_business_unit) IN ('bgm','home','lifestyle','furniture')
+                AND (order_date_key BETWEEN 20250701 AND 20250831)
+            GROUP BY
+                sales.analytic_super_category,
+                analytic_business_unit,
+                analytic_vertical,
+                sales.listing_id
+        ) bau
+        INNER JOIN (
+            SELECT
+                sales.listing_id,
+                order_date_key,
+                SUM(units) as units,
+                SUM(gmv) as gmv
+            FROM bigfoot_external_neo.cp_bi_prod_sales__forward_unit_history_fact sales
+            WHERE lower(sales.status) in ('in_progress','undelivered','completed','delivered','approved','shipped','ready_to_ship','returned', 'return_requested','activated')
+                AND sales.type !='service'
+                AND sales.replacement_for_unit IS NULL
+                AND sales.exchange_for_unit IS NULL
+                AND sales.is_freebie =FALSE
+                AND sales.marketplace_id IN ('FLIPKART')
+                AND sales.is_shopsy_order =FALSE
+                AND lower(sales.analytic_business_unit) IN ('bgm','home','lifestyle','furniture')
+                AND order_date_key BETWEEN 20260101 AND 20260131
+            GROUP BY
+                sales.listing_id,
+                order_date_key
+        ) fes
+            ON bau.listing_id = fes.listing_id
+    ) sub
+    GROUP BY
+        order_date_key,
+        analytic_business_unit,
+        analytic_super_category,
+        analytic_vertical
+) as price_drop
+    ON price_drop.order_date_key = speed.order_date_key 
+    AND price_drop.analytic_business_unit = speed.analytic_business_unit 
+    AND price_drop.analytic_super_category = speed.analytic_super_category 
+    AND price_drop.analytic_vertical = speed.analytic_vertical;
