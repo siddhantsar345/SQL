@@ -23,24 +23,29 @@ from myscripts.mygoogle import service
 from myscripts.mygoogle import mysheet
 from myscripts.send_email import send_plain_email_from_fvm
 
-data_file_path = "/home/siddhantsar.vc/arcade"
+data_file_path = "/home/siddhantsar.vc/arcade/"
 cred = '/home/siddhantsar.vc/serviceaccount.json'
 
-control_gsheet_id = "1ubo8Dd2io-11NVDDMJj9JSB2w7vv1c8lCFebJoc3SQM"
+control_gsheet_id = "11kDePI6yUBnJlh8OuwSNXhUIsQrygm1qJNPpLoz1mDk"
 control_gsheet_sheet_name = "Main"
-control_gsheet_table_range = "C3:M"
+# CHANGED: extended range from C3:M to C3:N because we added a RunMinute column.
+# If you add RunMinute somewhere other than at the end, adjust this accordingly.
+control_gsheet_table_range = "C3:N"
 
-delete_file_bool = True # deletes previous files if True
-parallel_workers = 3 # update, number of parallel workers for ProcessPoolExecutor
+delete_file_bool = True  # deletes previous files if True
+parallel_workers = 3  # update, number of parallel workers for ProcessPoolExecutor
 
-date_till_dt = datetime.today().replace(minute=0, second=0, microsecond=0) + relativedelta(days=0)
-# date_till_dt = datetime(2025, 8, 21, 13) + relativedelta(days=0)
+# CHANGED: removed `minute=0` so we keep the current minute too
+date_till_dt = datetime.today().replace(second=0, microsecond=0) + relativedelta(days=0)
+# date_till_dt = datetime(2025, 8, 21, 13, 15) + relativedelta(days=0)
 
 date_till_key = date_till_dt.strftime('%Y%m%d')
 date_hour = date_till_dt.hour
+date_minute = date_till_dt.minute  # NEW
 
 # enabling info level logging
-logging.basicConfig(level=logging.INFO ,format='%(levelname)s: %(message)s' )
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
 
 def retry(retries=3, delay=5, backoff=2):
     """
@@ -83,17 +88,19 @@ def retry(retries=3, delay=5, backoff=2):
 
     return decorator_retry
 
-def run_query(query1, source, file_path, filename,shared_token_cache,shared_auth_lock):
+
+def run_query(query1, source, file_path, filename, shared_token_cache, shared_auth_lock):
     time.sleep(randint(1, 10))
-    result = QaasAPI(client_id= my_details.QAAS_CLIENT_ID,rh_node_id=my_details.QAAS_NODE_ID,client_secret=my_details.QAAS_CLIENT_SECRET,
-                     enable_persistence=True,max_retries=2,
-                     shared_dict=shared_token_cache,shared_lock=shared_auth_lock).run_and_get_csv(query=query1,
-                                                                    queue=my_details.QAAS_QUEUE,
-                                                                    resubmit_query_on_failure= False,
-                                                                    source=source,
-                                                                    output_filename=file_path+filename)
+    result = QaasAPI(client_id=my_details.QAAS_CLIENT_ID, rh_node_id=my_details.QAAS_NODE_ID, client_secret=my_details.QAAS_CLIENT_SECRET,
+                     enable_persistence=True, max_retries=2,
+                     shared_dict=shared_token_cache, shared_lock=shared_auth_lock).run_and_get_csv(query=query1,
+                                                                                                  queue=my_details.QAAS_QUEUE,
+                                                                                                  resubmit_query_on_failure=False,
+                                                                                                  source=source,
+                                                                                                  output_filename=file_path + filename)
     # print(f"{result=}")
     return result
+
 
 @retry(retries=2, delay=5, backoff=2)
 def csv_upload_to_gdrive(ds, file_path, file_name, folder_id, overwrite, file_id):
@@ -102,20 +109,21 @@ def csv_upload_to_gdrive(ds, file_path, file_name, folder_id, overwrite, file_id
         'parents': [folder_id],
         'mimeType': 'text/csv'
     }
-    
+
     with open(file_path + file_name, 'rb') as f:
         media_body = MediaIoBaseUpload(fd=f, mimetype='text/csv', resumable=True)
         if not overwrite:
             response = ds.files().create(media_body=media_body, body=file_metadata).execute()
             print(f"File ID: {response['id']}")
         else:
-            file_metadata.pop('parents', None) 
-            
+            file_metadata.pop('parents', None)
+
             response = ds.files().update(
                 fileId=file_id, body=file_metadata, media_body=media_body).execute()
             print(f"File ID: {response['id']} is overwritten.")
-    
+
     return response['id']
+
 
 def delete_file(file_path, file_name):
     try:
@@ -124,17 +132,20 @@ def delete_file(file_path, file_name):
     except Exception as e:
         print(f"Error deleting file {file_name}: {e}")
 
+
 def failure_email(subject_text, sender, recipients, result):
     subject = f"VM Upload: {subject_text} Data Upload Failed for Data dated {date_till_dt.strftime('%Y%m%d')}"
     body = f"The following issues were encountered during the VM data upload process:\n\n{result}\n\nPlease investigate and resolve these issues promptly."
     send_plain_email_from_fvm(subject, body, sender, recipients)
     print("Failure email sent.")
 
+
 def success_email(subject_text, sender, recipients, file_id):
     subject = f"VM Upload: {subject_text} Data Upload Successful for Data dated {date_till_dt.strftime('%Y%m%d')}"
     body = f"The {subject_text} Data upload process from VM completed successfully.\nThe data file can be found at the following link:\n\nhttps://drive.google.com/file/d/{file_id}/view?usp=drive_link"
     send_plain_email_from_fvm(subject, body, sender, recipients)
     print("Success email sent.")
+
 
 def process_job(job_data, shared_token_cache, shared_auth_lock):
     """
@@ -155,11 +166,11 @@ def process_job(job_data, shared_token_cache, shared_auth_lock):
 
     log_dict = {"Query Pass": [], "Query Fail": [], "Write Pass": [], "Write Fail": []}
 
-    ds = service.get_drive_service(cred, my_details.email)
+    ds = service.get_drive_service(cred)
 
     # Run Query
     try:
-        result = run_query(query, source, data_file_path, file_name,shared_token_cache,shared_auth_lock)
+        result = run_query(query, source, data_file_path, file_name, shared_token_cache, shared_auth_lock)
         if result:
             log_dict['Query Pass'].append(file_name)
         else:
@@ -193,13 +204,14 @@ def process_job(job_data, shared_token_cache, shared_auth_lock):
 
     return log_dict
 
+
 def run_parallel(df, parallel_workers):
     with Manager() as manager:
-        shared_token_cache = manager.dict() # Shared token storage
+        shared_token_cache = manager.dict()  # Shared token storage
         shared_auth_lock = manager.Lock()
 
         with ProcessPoolExecutor(max_workers=parallel_workers) as p:
-            results = p.map(process_job, df.to_dict(orient='records'),repeat(shared_token_cache), repeat(shared_auth_lock))
+            results = p.map(process_job, df.to_dict(orient='records'), repeat(shared_token_cache), repeat(shared_auth_lock))
             aggregated_log = {"Query Pass": [], "Query Fail": [], "Write Pass": [], "Write Fail": []}
             for log in list(results):
                 aggregated_log["Query Pass"].extend(log.get("Query Pass", []))
@@ -209,9 +221,11 @@ def run_parallel(df, parallel_workers):
 
     return aggregated_log
 
+
 if __name__ == "__main__":
 
-    print(f"--- Script Started for {date_till_key} Hour: {date_hour} ---")
+    # CHANGED: print now shows minute too
+    print(f"--- Script Started for {date_till_key} Hour: {date_hour} Minute: {date_minute:02d} ---")
 
     if delete_file_bool and os.path.exists(data_file_path):
         print(f"Cleaning up old files in {data_file_path}...")
@@ -231,23 +245,31 @@ if __name__ == "__main__":
                                first_row_as_header=True)
     control_df.dropna(how='all', inplace=True)
 
-    # covert control_df['RunHour'] to int and Run, Override to Bool
+    # convert control_df['RunHour'] and ['RunMinute'] to int and Run, Override to Bool
     control_df['RunHour'] = pd.to_numeric(control_df['RunHour'], errors='coerce').fillna(-1).astype(int)
+    # NEW: parse the RunMinute column the same way as RunHour
+    control_df['RunMinute'] = pd.to_numeric(control_df['RunMinute'], errors='coerce').fillna(-1).astype(int)
     control_df['Run'] = control_df['Run'].apply(lambda x: str(x).strip().upper() == 'TRUE')
     control_df['Override'] = control_df['Override'].apply(lambda x: str(x).strip().upper() == 'TRUE')
-    control_df['Overwrite'] = control_df['FileId'].apply(lambda x: True if x!= "" else False)
+    control_df['Overwrite'] = control_df['FileId'].apply(lambda x: True if x != "" else False)
 
-    # filtering control_df based on Run and RunHour
-    filtered_control_df = control_df[((control_df['Run'] == True) & (control_df['RunHour'] == date_hour)) | (
-                control_df['Override'] == True)].copy()
-    
-    
+    # CHANGED: filter now matches BOTH RunHour and RunMinute against current time
+    filtered_control_df = control_df[
+        (
+            (control_df['Run'] == True)
+            & (control_df['RunHour'] == date_hour)
+            & (control_df['RunMinute'] == date_minute)
+        )
+        | (control_df['Override'] == True)
+    ].copy()
+
     filtered_control_df['final_file_name'] = filtered_control_df.apply(determine_name, axis=1)
 
     print(filtered_control_df)
 
     if filtered_control_df.empty:
-        print(f"No jobs scheduled for hour {date_hour}")
+        # CHANGED: clearer message with HH:MM
+        print(f"No jobs scheduled for {date_hour:02d}:{date_minute:02d}")
         sys.exit(0)
     else:
         logs = run_parallel(filtered_control_df, parallel_workers)
