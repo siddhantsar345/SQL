@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__fdp-datahub-mcp__list_schema_fields",
+      "mcp__fdp-datahub-mcp__search"
+    ]
+  }
+}
