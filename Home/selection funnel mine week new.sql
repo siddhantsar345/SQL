@@ -64,7 +64,7 @@ WITH weekly_snapshot AS (
     INNER JOIN bigfoot_external_neo.scp_oms__date_dim_fact wd
         ON list_dim.process_date_key = wd.date_dim_key
         
-    WHERE list_dim.process_date_key >= 20260510
+    WHERE list_dim.process_date_key >= 20260517
     AND list_dim.marketplace_id = 'FLIPKART'
     GROUP BY 1,2,3
 
@@ -143,7 +143,7 @@ INNER JOIN bigfoot_external_neo.scp_oms__date_dim_fact wd
 LEFT JOIN bigfoot_external_neo.sp_product__product_attribute_hive_dim prod_dim
     ON list.product_id = prod_dim.product_id
 
-WHERE DATE(CAST(list.listing_created_on AS TIMESTAMP)) >= '2026-05-10'
+WHERE DATE(CAST(list.listing_created_on AS TIMESTAMP)) >= '2026-05-17'
   AND LOWER(prod_dim.analytic_business_unit) IN ('home', 'furniture')    
   AND LOWER(prod_dim.analytic_vertical) NOT IN ('plantsapling', 'plantseed')
   AND (
@@ -199,7 +199,7 @@ on list_dim_fact.listing_id = sales.listing_id
         AND sales.is_freebie = FALSE
         AND sales.marketplace_id = 'FLIPKART'
         AND sales.is_shopsy_order = False
-        AND sales.order_date_key >= 20260510
+        AND sales.order_date_key >= 20260517
         AND lower(prod_dim.analytic_business_unit) IN ('home', 'furniture')
         and lower(prod_dim.analytic_vertical) not in ('plantsapling', 'plantseed')
         and (prod_dim.analytic_vertical not in ('MobileProtectionDesignerCaseCover','Book','BikeBodyCover','MobileProtectionPlainCaseCover','WatchCombo','CarBodyCover','MobileSkin','MobileProtectionMobileScreenGuard','CameraLensProtector','SmartWatchStraps','SmartWatchScreenGuard','MobileProtectionDesignerCaseCover(OLD)','MobileProtectionPlainCaseCover(OLD)','MobileProtectionMobilePouches(OLD)') or prod_dim.vertical_name in ('book','regionalbooks')) 
@@ -251,7 +251,7 @@ on list_dim_fact.listing_id = sales.listing_id
         AND sales.is_freebie = FALSE
         AND sales.marketplace_id = 'FLIPKART'
         AND sales.is_shopsy_order = False
-        AND sales.order_date_key >= 20260510
+        AND sales.order_date_key >= 20260517
         AND DATE_DIFF(
                 PARSE_DATE('%Y%m%d', CAST(sales.order_date_key AS STRING)), 
                 list_dim_fact.listing_birth_date, 
@@ -316,7 +316,7 @@ from
         ON sales.product_id = prod_dim.product_id
 
     WHERE sales.marketplace_id='FLIPKART' 
-        and sales.date_key >= 20260510
+        and sales.date_key >= 20260517
         and lower(sales.analytic_business_unit) in ('home', 'furniture')
         and lower(prod_dim.analytic_vertical) not in ('plantsapling', 'plantseed')
         and (prod_dim.analytic_vertical not in ('MobileProtectionDesignerCaseCover','Book','BikeBodyCover','MobileProtectionPlainCaseCover','WatchCombo','CarBodyCover','MobileSkin','MobileProtectionMobileScreenGuard','CameraLensProtector','SmartWatchStraps','SmartWatchScreenGuard','MobileProtectionDesignerCaseCover(OLD)','MobileProtectionPlainCaseCover(OLD)','MobileProtectionMobilePouches(OLD)') or prod_dim.vertical_name in ('book','regionalbooks')) 
@@ -373,7 +373,7 @@ FROM (
     ON sales.listing_id = lhd.listing_id
 
     WHERE sales.marketplace_id = 'FLIPKART' 
-        AND sales.date_key >= 20260510
+        AND sales.date_key >= 20260517
         AND DATE_DIFF(
                 PARSE_DATE('%Y%m%d', CAST(sales.date_key AS STRING)), 
                 lhd.listing_birth_date, 
@@ -403,7 +403,7 @@ WITH weekly_snapshot AS (
     INNER JOIN bigfoot_external_neo.scp_oms__date_dim_fact wd
         ON list_dim.process_date_key = wd.date_dim_key
         
-    WHERE list_dim.process_date_key >= 20260510
+    WHERE list_dim.process_date_key >= 20260517
     AND list_dim.marketplace_id = 'FLIPKART'
     GROUP BY 1,2,3
 
