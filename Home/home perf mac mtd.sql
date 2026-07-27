@@ -34,7 +34,7 @@ base AS (
     AND sales.exchange_for_unit IS NULL
     AND sales.is_freebie = FALSE
     AND (sales.marketplace_id IN ('FLIPKART') OR (sales.marketplace_id = 'HYPERLOCAL' AND hl.analytic_vertical IS NOT NULL))
-    AND sales.order_date_key BETWEEN CAST(FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)) AS INT64) AND CAST(FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)) AS INT64) 
+    AND sales.order_date_key BETWEEN CAST(FORMAT_DATE('%Y%m%d', DATE_TRUNC(CURRENT_DATE(), MONTH)) AS INT64) AND CAST(FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)) AS INT64)
     AND sales.analytic_business_unit IN ('Home')
     AND sales.is_shopsy_order = FALSE
 
@@ -102,7 +102,7 @@ bu_level AS (
     AND sales.exchange_for_unit IS NULL
     AND sales.is_freebie = FALSE
     AND (sales.marketplace_id IN ('FLIPKART') OR (sales.marketplace_id = 'HYPERLOCAL' AND hl.analytic_vertical IS NOT NULL))
-    AND sales.order_date_key BETWEEN CAST(FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)) AS INT64) AND CAST(FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)) AS INT64) 
+    AND sales.order_date_key BETWEEN CAST(FORMAT_DATE('%Y%m%d', DATE_TRUNC(CURRENT_DATE(), MONTH)) AS INT64) AND CAST(FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)) AS INT64)
     AND sales.analytic_business_unit IN ('Home')
     AND sales.is_shopsy_order = FALSE
 
